@@ -33,6 +33,12 @@
                 return;
             }
 
+            const tags = content.match(/#\S+/g) || [];
+            console.log('Extracted tags:', tags);
+
+            const payload = { content: content, tags: tags };
+            console.log('Sending payload:', JSON.stringify(payload));
+
             button.textContent = '保存中...';
             button.disabled = true;
 
@@ -44,14 +50,21 @@
                         'apikey': SUPABASE_ANON_KEY,
                         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
                     },
-                    body: JSON.stringify({ content: content })
+                    body: JSON.stringify(payload)
                 });
 
+                console.log('Response status:', response.status);
+
                 if (!response.ok) {
-                    throw new Error('保存に失敗しました。');
+                    const errorData = await response.json();
+                    console.error('Error response:', errorData);
+                    throw new Error(errorData.message || '保存に失敗しました。');
                 }
 
-                alert('保存しました！');
+                const responseData = await response.json();
+                console.log('Success response:', responseData);
+
+                alert('保存しました！タグ: ' + (tags.length > 0 ? tags.join(', ') : 'なし'));
                 textarea.value = '';
             } catch (error) {
                 console.error('Error:', error);

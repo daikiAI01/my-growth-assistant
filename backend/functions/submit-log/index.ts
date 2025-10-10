@@ -1,69 +1,52 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
 serve(async (req) => {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    console.log("=== Edge Function Started ===");
+    const body = await req.json();
+    console.log("Received body:", JSON.stringify(body));
 
-    const { content } = await req.json();
-    console.log("Received content:", content);
+    const { content, tags } = body;
+    console.log("Parsed content:", content);
+    console.log("Parsed tags:", JSON.stringify(tags));
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    console.log("SUPABASE_URL exists:", !!supabaseUrl);
-    console.log("SUPABASE_SERVICE_ROLE_KEY exists:", !!serviceRoleKey);
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error("Missing environment variables");
-    }
-
-    // service_roleキーで管理者権限を使用
     const supabaseClient = createClient(
-      supabaseUrl,
-      serviceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    console.log("Attempting to insert into logs table...");
+    const insertData = { content: content, tags: tags };
+    console.log("Inserting data:", JSON.stringify(insertData));
 
     const { data, error } = await supabaseClient
       .from("logs")
-      .insert({ content: content })
+      .insert(insertData)
       .select();
 
     if (error) {
-      console.error("Database error:", error);
+      console.error("Database error:", JSON.stringify(error));
       throw error;
     }
 
-    console.log("Insert successful:", data);
+    console.log("Insert successful, returned data:", JSON.stringify(data));
 
-    return new Response(JSON.stringify({ message: "Log saved!", data }), {
+    return new Response(JSON.stringify({ message: "Log saved!", data: data }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
 
   } catch (err) {
-    console.error("Error in Edge Function:", err);
-    return new Response(JSON.stringify({
-      error: String(err?.message ?? err),
-      details: err
-    }), {
+    console.error("Function error:", err.message);
+    return new Response(JSON.stringify({ message: err.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

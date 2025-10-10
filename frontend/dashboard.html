@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Growth Assistant - Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vanilla-calendar-pro/build/vanilla-calendar.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vanilla-calendar-pro/build/vanilla-calendar.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* CSS変数を定義 */
+        :root {
+            --bg-color: #F8F9FA;
+            --text-color: #212529;
+            --card-bg-color: #FFFFFF;
+            --border-color: #DEE2E6;
+            --subtle-text-color: #6C757D;
+            --accent-color: #007BFF;
+            --shadow-color: rgba(0, 0, 0, 0.05);
+            --input-bg: #FFFFFF;
+            --modal-overlay: rgba(0, 0, 0, 0.4);
+            --goal-bg: #E7F3FF;
+            --goal-border: #B3D9FF;
+        }
+
+        body.dark-theme {
+            --bg-color: #1a1a1a;
+            --text-color: #e0e0e0;
+            --card-bg-color: #2a2a2a;
+            --border-color: #444;
+            --subtle-text-color: #888;
+            --shadow-color: rgba(0, 0, 0, 0.2);
+            --input-bg: #333;
+            --modal-overlay: rgba(0, 0, 0, 0.6);
+            --goal-bg: #331a4d;
+            --goal-border: #553377;
+        }
+
+        /* 基本スタイル */
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 2rem 1rem;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 2rem;
+        }
+
+        h2 {
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+
+        /* テーマ切り替えボタン */
+        #themeToggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            cursor: pointer;
+            padding: 8px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--card-bg-color);
+            color: var(--text-color);
+            font-family: 'Noto Sans JP', sans-serif;
+            font-size: 14px;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        #themeToggle:hover {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        /* カードスタイル */
+        .card {
+            background-color: var(--card-bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 12px var(--shadow-color);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .card h2 {
+            margin-top: 0;
+        }
+
+        /* 分析レポート */
+        .keyword {
+            display: inline-block;
+            background-color: var(--accent-color);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin: 5px;
+        }
+
+        .sentiment {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+
+        /* カレンダー */
+        .vanilla-calendar {
+            --v-calendar-bg: var(--card-bg-color);
+            --v-calendar-color: var(--text-color);
+            --v-calendar-border: 1px solid var(--border-color);
+            --v-calendar-color-hover: var(--text-color);
+            --v-calendar-bg-hover: var(--input-bg);
+            --v-calendar-week-color: var(--subtle-text-color);
+        }
+
+        .vanilla-calendar-day__btn_today {
+            background-color: var(--accent-color) !important;
+            color: white !important;
+        }
+
+        /* 目標セクション */
+        .add-goal-btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            font-family: 'Noto Sans JP', sans-serif;
+            font-size: 16px;
+            margin-bottom: 1rem;
+            transition: opacity 0.3s;
+        }
+
+        .add-goal-btn:hover {
+            opacity: 0.8;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 200px;
+            width: 200px;
+            margin: 0 auto 2rem;
+        }
+
+        #goalsContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .goal-item {
+            background-color: var(--goal-bg);
+            border: 1px solid var(--goal-border);
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .goal-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .goal-item.completed .goal-content {
+            text-decoration: line-through;
+            color: var(--subtle-text-color);
+        }
+
+        .goal-content {
+            flex-grow: 1;
+        }
+
+        /* ログセクション */
+        .search-form {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-form input {
+            flex-grow: 1;
+            padding: 10px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-family: 'Noto Sans JP', sans-serif;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .search-form button {
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+
+        .search-form button:hover {
+            background-color: #218838;
+        }
+
+        #logsContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .log-item {
+            background-color: var(--card-bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .log-date {
+            font-size: 0.8rem;
+            color: var(--subtle-text-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .log-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .log-tags {
+            margin-top: 0.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .tag {
+            display: inline-block;
+            background-color: var(--accent-color);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+        }
+
+        .log-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .log-actions button {
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-family: 'Noto Sans JP', sans-serif;
+            transition: background-color 0.3s;
+            margin-left: 0.5rem;
+        }
+
+        .log-actions button:hover {
+            background-color: var(--input-bg);
+        }
+
+        /* モーダル */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: var(--modal-overlay);
+        }
+
+        .modal-content {
+            background-color: var(--card-bg-color);
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            width: 80%;
+            max-width: 500px;
+            border-radius: 8px;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+        }
+
+        .modal-content textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 1rem;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 8px;
+            font-family: 'Noto Sans JP', sans-serif;
+            transition: background-color 0.3s, border-color 0.3s;
+            box-sizing: border-box;
+        }
+
+        .modal-content button {
+            width: 100%;
+            padding: 10px;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+
+        .modal-content button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <button id="themeToggle">🌓 テーマ切替</button>
+
+    <div class="container">
+        <h1>📊 記録ダッシュボード</h1>
+
+        <!-- 分析レポートカード -->
+        <div class="card">
+            <h2>📈 分析レポート</h2>
+            <div id="reportContent">読み込み中...</div>
+        </div>
+
+        <!-- アクティビティカレンダーカード -->
+        <div class="card">
+            <h2>📅 アクティビティカレンダー</h2>
+            <div id="calendar"></div>
+        </div>
+
+        <!-- 目標カード -->
+        <div class="card">
+            <h2>🎯 今週の目標</h2>
+            <button class="add-goal-btn" id="addGoalBtn">+ 新しい目標を追加</button>
+            <div class="chart-container">
+                <canvas id="goalsChart"></canvas>
+            </div>
+            <div id="goalsContainer"></div>
+        </div>
+
+        <!-- ログ一覧カード -->
+        <div class="card">
+            <h2>📝 日々の記録</h2>
+            <div class="search-form">
+                <input type="text" id="searchInput" placeholder="キーワードで記録を検索...">
+                <button id="searchBtn">🔍 検索</button>
+            </div>
+            <div id="logsContainer"></div>
+        </div>
+    </div>
+
+    <!-- 目標追加モーダル -->
+    <div id="goalModal" class="modal">
+        <div class="modal-content">
+            <h2>新しい目標</h2>
+            <textarea id="goalContent" placeholder="新しい目標を入力..."></textarea>
+            <button id="saveGoalBtn">保存</button>
+        </div>
+    </div>
+
+    <!-- ログ編集モーダル -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <h2>記録を編集</h2>
+            <textarea id="editContent"></textarea>
+            <button id="saveEditBtn">更新</button>
+            <input type="hidden" id="editLogId">
+        </div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+        // テーマ切り替え機能
+        const themeToggle = document.getElementById('themeToggle');
+        const currentTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        if (currentTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+        }
+
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-theme');
+            let theme = 'light';
+            if (document.body.classList.contains('dark-theme')) {
+                theme = 'dark';
+            }
+            localStorage.setItem('theme', theme);
+        });
+
+        const SUPABASE_URL = 'https://bbuydqtmzjgxxamtvtda.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJidXlkcXRtempneHhhbXR2dGRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk5OTUxODksImV4cCI6MjA3NTU3MTE4OX0.Lwp3DV2RPYf8pX7JjZAW33kH1jC4sWeZ_M7e4usAHXg';
+
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const reportContent = document.getElementById('reportContent');
+        const goalsChartCanvas = document.getElementById('goalsChart');
+        let goalsChart = null;
+        const goalsContainer = document.getElementById('goalsContainer');
+        const logsContainer = document.getElementById('logsContainer');
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const addGoalBtn = document.getElementById('addGoalBtn');
+        const goalModal = document.getElementById('goalModal');
+        const saveGoalBtn = document.getElementById('saveGoalBtn');
+        const goalContent = document.getElementById('goalContent');
+
+        // 目標追加モーダルの操作
+        addGoalBtn.onclick = () => { goalModal.style.display = "block"; }
+        window.onclick = (event) => {
+            if (event.target == goalModal) {
+                goalModal.style.display = "none";
+            }
+            if (event.target == editModal) {
+                editModal.style.display = "none";
+            }
+        }
+
+        saveGoalBtn.onclick = async () => {
+            const content = goalContent.value.trim();
+            if (!content) {
+                alert('目標を入力してください。');
+                return;
+            }
+            try {
+                const { error } = await supabase.from('goals').insert({ content });
+                if (error) throw error;
+                alert('新しい目標を保存しました！');
+                goalModal.style.display = "none";
+                goalContent.value = '';
+                fetchGoals();
+            } catch (error) {
+                console.error('Error saving goal:', error);
+                alert('目標の保存に失敗しました。');
+            }
+        };
+
+        // 分析レポート機能
+        async function runAnalytics() {
+            try {
+                const { data: logs, error } = await supabase.from('logs').select('content');
+                if (error) throw error;
+
+                if (logs.length === 0) {
+                    reportContent.innerHTML = '<p>分析する記録がまだありません。</p>';
+                    return;
+                }
+
+                const allText = logs.map(log => log.content).join(' ');
+                const words = allText.split(/[\s、。！？「」\n]+/).filter(w => w.length > 1);
+                const wordCounts = {};
+                words.forEach(word => {
+                    wordCounts[word] = (wordCounts[word] || 0) + 1;
+                });
+                const topKeywords = Object.entries(wordCounts)
+                    .filter(([word]) => word.length > 1)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 10);
+
+                const positiveWords = ['良い', 'すごい', '楽しい', '嬉しい', '成功', '達成', '頑張った', '最高', '良かった', 'できた', '完成'];
+                const negativeWords = ['悪い', 'ダメ', '辛い', '悲しい', '失敗', '問題', '難しい', 'できない', '困難'];
+                let sentimentScore = 0;
+
+                positiveWords.forEach(word => {
+                    if (allText.includes(word)) sentimentScore++;
+                });
+                negativeWords.forEach(word => {
+                    if (allText.includes(word)) sentimentScore--;
+                });
+
+                let sentimentText = '😐 普通';
+                if (sentimentScore > 0) sentimentText = '😄 ポジティブ';
+                if (sentimentScore < 0) sentimentText = '😞 ネガティブ';
+
+                let reportHTML = `<h3>感情分析</h3><div class="sentiment">${sentimentText}</div><h3>トップキーワード</h3>`;
+                topKeywords.forEach(([word, count]) => {
+                    reportHTML += `<span class="keyword">${word} (${count})</span>`;
+                });
+                reportContent.innerHTML = reportHTML;
+
+            } catch (error) {
+                console.error('Error running analytics:', error);
+                reportContent.innerHTML = `<p>分析に失敗しました: ${error.message}</p>`;
+            }
+        }
+
+        // カレンダー初期化機能
+        async function initializeCalendar() {
+            try {
+                const { data, error } = await supabase
+                    .from('logs')
+                    .select('created_at');
+
+                if (error) throw error;
+
+                const dates = data.map(log => log.created_at.substring(0, 10));
+
+                const calendar = new window.VanillaCalendar('#calendar', {
+                    settings: {
+                        lang: 'ja',
+                        iso8601: false,
+                        range: {
+                            disablePast: false,
+                        },
+                        selection: {
+                            day: false,
+                        },
+                        visibility: {
+                            theme: 'dark',
+                        },
+                    },
+                    dates: {
+                        dates: dates,
+                    },
+                });
+                calendar.init();
+
+            } catch (error) {
+                console.error('Error initializing calendar:', error);
+                document.getElementById('calendar').innerHTML = '<p>カレンダーの読み込みに失敗しました。</p>';
+            }
+        }
+
+        // 目標チャート描画機能
+        function renderGoalsChart(goals) {
+            const completedGoals = goals.filter(goal => goal.is_completed).length;
+            const totalGoals = goals.length;
+
+            const chartData = {
+                labels: ['完了', '未完了'],
+                datasets: [{
+                    data: [completedGoals, totalGoals - completedGoals],
+                    backgroundColor: ['#28a745', '#999'],
+                    borderColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-color').trim(),
+                    borderWidth: 2
+                }]
+            };
+
+            if (goalsChart) {
+                goalsChart.destroy();
+            }
+
+            goalsChart = new Chart(goalsChartCanvas, {
+                type: 'doughnut',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            enabled: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // 目標取得機能
+        async function fetchGoals() {
+            goalsContainer.innerHTML = '<p>読み込み中...</p>';
+            try {
+                const { data, error } = await supabase.from('goals').select('*').order('created_at', { ascending: false });
+                if (error) throw error;
+
+                renderGoalsChart(data);
+
+                if (data.length === 0) {
+                    goalsContainer.innerHTML = '<p>目標はまだ設定されていません。</p>';
+                    return;
+                }
+                goalsContainer.innerHTML = '';
+                data.forEach(goal => {
+                    const goalItem = document.createElement('div');
+                    goalItem.className = 'goal-item';
+                    if (goal.is_completed) {
+                        goalItem.classList.add('completed');
+                    }
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = goal.is_completed;
+                    checkbox.onchange = async () => {
+                        const { error } = await supabase
+                            .from('goals')
+                            .update({ is_completed: checkbox.checked })
+                            .eq('id', goal.id);
+
+                        if (error) {
+                            alert('更新に失敗しました。');
+                            console.error(error);
+                        } else {
+                            goalItem.classList.toggle('completed');
+                            fetchGoals();
+                        }
+                    };
+
+                    const content = document.createElement('div');
+                    content.className = 'goal-content';
+                    content.textContent = goal.content;
+
+                    goalItem.appendChild(checkbox);
+                    goalItem.appendChild(content);
+                    goalsContainer.appendChild(goalItem);
+                });
+            } catch (error) {
+                console.error('Error fetching goals:', error);
+                goalsContainer.innerHTML = `<p>目標の読み込みに失敗しました: ${error.message}</p>`;
+            }
+        }
+
+        // ログ取得機能
+        async function fetchLogs(searchTerm = '') {
+            logsContainer.innerHTML = '<p>読み込み中...</p>';
+            try {
+                let query = supabase
+                    .from('logs')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (searchTerm) {
+                    query = query.like('content', `%${searchTerm}%`);
+                }
+
+                const { data, error } = await query;
+
+                if (error) throw error;
+                if (data.length === 0) {
+                    logsContainer.innerHTML = '<p>該当する記録はありません。</p>';
+                    return;
+                }
+                logsContainer.innerHTML = '';
+                data.forEach(log => {
+                    const logItem = document.createElement('div');
+                    logItem.className = 'log-item';
+                    const logDate = new Date(log.created_at).toLocaleString('ja-JP');
+
+                    let tagsHtml = '';
+                    if (log.tags && log.tags.length > 0) {
+                        const tagBadges = log.tags.map(tag => `<span class="tag">${tag}</span>`).join('');
+                        tagsHtml = `<div class="log-tags">${tagBadges}</div>`;
+                    }
+
+                    logItem.innerHTML = `
+                        <div class="log-item-header">
+                            <div class="log-date">${logDate}</div>
+                            <div class="log-actions">
+                                <button class="edit-btn" data-id="${log.id}">編集</button>
+                                <button class="delete-btn" data-id="${log.id}">削除</button>
+                            </div>
+                        </div>
+                        <div class="log-content">${log.content}</div>
+                        ${tagsHtml}
+                    `;
+                    logsContainer.appendChild(logItem);
+                });
+            } catch (error) {
+                console.error('Error fetching logs:', error);
+                logsContainer.innerHTML = `<p>データの読み込みに失敗しました: ${error.message}</p>`;
+            }
+        }
+
+        // ログ削除機能
+        logsContainer.addEventListener('click', async (event) => {
+            if (event.target.classList.contains('delete-btn')) {
+                const logId = event.target.dataset.id;
+
+                if (confirm('この記録を本当に削除しますか？')) {
+                    try {
+                        const { error } = await supabase
+                            .from('logs')
+                            .delete()
+                            .eq('id', logId);
+
+                        if (error) {
+                            throw error;
+                        }
+
+                        alert('記録を削除しました。');
+                        event.target.closest('.log-item').remove();
+
+                    } catch (error) {
+                        console.error('Error deleting log:', error);
+                        alert('削除に失敗しました。');
+                    }
+                }
+            }
+        });
+
+        // 検索機能
+        searchBtn.addEventListener('click', () => {
+            const searchTerm = searchInput.value.trim();
+            fetchLogs(searchTerm);
+        });
+
+        // ログ編集機能
+        const editModal = document.getElementById('editModal');
+        const editContent = document.getElementById('editContent');
+        const saveEditBtn = document.getElementById('saveEditBtn');
+        const editLogId = document.getElementById('editLogId');
+
+        logsContainer.addEventListener('click', (event) => {
+            if (event.target.classList.contains('edit-btn')) {
+                const logItem = event.target.closest('.log-item');
+                const contentDiv = logItem.querySelector('.log-content');
+
+                editContent.value = contentDiv.textContent;
+                editLogId.value = event.target.dataset.id;
+
+                editModal.style.display = 'block';
+            }
+        });
+
+        saveEditBtn.addEventListener('click', async () => {
+            const newContent = editContent.value.trim();
+            const logId = editLogId.value;
+
+            if (!newContent) {
+                alert('内容を入力してください。');
+                return;
+            }
+
+            try {
+                const { error } = await supabase
+                    .from('logs')
+                    .update({ content: newContent })
+                    .eq('id', logId);
+
+                if (error) {
+                    throw error;
+                }
+
+                alert('記録を更新しました。');
+                editModal.style.display = 'none';
+
+                const logItemToUpdate = document.querySelector(`.edit-btn[data-id='${logId}']`).closest('.log-item');
+                logItemToUpdate.querySelector('.log-content').textContent = newContent;
+
+            } catch (error) {
+                console.error('Error updating log:', error);
+                alert('更新に失敗しました。');
+            }
+        });
+
+        // ページ初期化
+        async function initializePage() {
+            runAnalytics();
+            fetchGoals();
+            await fetchLogs();
+            initializeCalendar();
+        }
+
+        initializePage();
+    </script>
+</body>
+</html>
