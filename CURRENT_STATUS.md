@@ -1,7 +1,7 @@
 # My Growth Assistant - 現在の状態
 
-**最終更新**: 2025-10-10
-**Gitコミット**: c7d3c30
+**最終更新**: 2025-10-15
+**Gitコミット**: 54d2842
 
 ---
 
@@ -65,35 +65,25 @@
 - 感情分析（ポジティブ/ネガティブ/普通）
 - 日本語テキスト対応
 
+#### 🏷️ タグ機能（2025-10-15 修正完了✅）
+- ハッシュタグ自動抽出（`#タグ名` 形式）
+- PostgreSQL RPC関数による配列保存
+- ダッシュボードで青いバッジ表示
+- フロントエンドで正規表現 `/#\S+/g` による抽出
+
+**実装方法**:
+- データベースにRPC関数 `insert_log_with_tags` を作成
+- Edge FunctionでRPCを呼び出してtext[]配列を保存
+- Supabase JSクライアントのinsert()の配列変換問題を解決
+
 ---
 
 ## ⚠️ 未解決の問題
 
-### タグ付け機能（動作しない）
+**現在、未解決の問題はありません！** 🎉
 
-**症状**: ハッシュタグが `null` として保存される
-
-**実装状況**:
-- ✅ データベースに `tags text[]` カラム追加済み
-- ✅ フロントエンドで正規表現 `/#\S+/g` でタグ抽出
-- ✅ バックエンドでタグを受信
-- ❌ データベースに保存時に `null` になる
-
-**例**:
-```
-入力: "今日は勉強した #学習 #成長"
-期待: tags = ["#学習", "#成長"]
-実際: tags = null
-```
-
-**デバッグ状況**:
-- フロントエンド・バックエンドに詳細ログ追加
-- 5回以上再デプロイ実施
-- 原因は不明（キャッシュ問題、PostgreSQL変換問題など推測）
-
-**詳細ドキュメント**:
-- `docs/TAG_FEATURE_TROUBLESHOOTING.md` - 詳細な調査記録
-- `docs/DEVELOPMENT_LOG.md` - 全実装履歴
+以前のタグ機能の問題は2025-10-15に解決されました。
+詳細は `docs/TAG_FEATURE_TROUBLESHOOTING.md` を参照してください。
 
 ---
 
@@ -103,15 +93,16 @@
 my-growth-assistant/
 ├── backend/functions/
 │   ├── line-webhook/index.ts          # LINE Bot
-│   └── submit-log/index.ts            # ログ保存（タグ対応版）
+│   └── submit-log/index.ts            # ログ保存（タグ対応版・RPC使用）
 ├── frontend/
 │   ├── index.html                     # 入力フォーム
 │   └── dashboard.html                 # メインダッシュボード
 ├── supabase/migrations/
-│   └── 20251010125644_add_tags_to_logs.sql
+│   ├── 20251010125644_add_tags_to_logs.sql      # tagsカラム追加
+│   └── 20251015000000_fix_tags_with_rpc.sql     # RPC関数作成
 ├── docs/
 │   ├── DEVELOPMENT_LOG.md             # 詳細開発ログ
-│   ├── TAG_FEATURE_TROUBLESHOOTING.md # タグ機能課題
+│   ├── TAG_FEATURE_TROUBLESHOOTING.md # タグ機能課題（解決済み）
 │   └── DEBUG_DIARY.md                 # 過去デバッグ記録
 ├── CURRENT_STATUS.md                  # 本ファイル
 └── README.md
@@ -126,9 +117,15 @@ my-growth-assistant/
 CREATE TABLE logs (
   id BIGSERIAL PRIMARY KEY,
   content TEXT NOT NULL,
-  tags TEXT[] DEFAULT NULL,      -- ★未動作
+  tags TEXT[] DEFAULT NULL,      -- ✅正常動作（RPC経由で保存）
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- RPC関数（tags配列を正しく処理）
+CREATE OR REPLACE FUNCTION insert_log_with_tags(
+  p_content TEXT,
+  p_tags TEXT[] DEFAULT NULL
+) RETURNS TABLE (...) AS $$...$$;
 ```
 
 ### `goals` テーブル
@@ -147,9 +144,9 @@ CREATE TABLE goals (
 
 ### ログの記録
 1. `frontend/index.html` を開く
-2. テキストを入力
+2. テキストを入力（ハッシュタグも使用可能！例: `#学習 #成長`）
 3. 「保存する」をクリック
-4. （タグ機能は現在動作しません）
+4. タグが自動的に抽出・保存されます ✅
 
 ### ダッシュボード
 1. `frontend/dashboard.html` を開く
@@ -190,18 +187,13 @@ supabase db push --include-all
 
 ## 📝 次にやること
 
-### タグ機能の修正（優先度: 高）
-1. Supabaseダッシュボードで Edge Function ログを確認
-2. PostgreSQL配列リテラル形式 `{#tag1,#tag2}` での送信を試す
-3. 生SQLでの挿入テストを実施
-4. 必要に応じてSupabaseサポートに問い合わせ
-5. 代替案: tagsを別テーブルに分離
-
-### その他の改善案
-- ログのページネーション（現在は全件表示）
-- 目標の期限設定機能
-- 週次/月次レポート機能
-- エクスポート機能（CSV/JSON）
+### 改善案（優先度順）
+1. **ログのページネーション** - 現在は全件表示のためパフォーマンス改善が必要
+2. **目標の期限設定機能** - 目標に締め切りを設定できるように
+3. **週次/月次レポート機能** - 期間別の分析を自動生成
+4. **エクスポート機能** - CSV/JSON形式でデータをエクスポート
+5. **タグによるフィルタリング** - 特定のタグでログを絞り込む機能
+6. **タグ統計** - 最も使用されているタグのランキング表示
 
 ---
 
@@ -248,21 +240,24 @@ body.dark-theme {
 
 ## 🐛 既知のバグ・制限事項
 
-1. **タグ機能が動作しない**（最優先課題）
-2. ログが多い場合のパフォーマンス未最適化
-3. モバイル表示は動作するが最適化の余地あり
-4. 画像・ファイル添付機能なし
+1. ログが多い場合のパフォーマンス未最適化（ページネーション必要）
+2. モバイル表示は動作するが最適化の余地あり
+3. 画像・ファイル添付機能なし
+
+**✅ 解決済み**:
+- ~~タグ機能が動作しない~~ → 2025-10-15に解決（PostgreSQL RPC使用）
 
 ---
 
 ## 📊 統計情報
 
-- **総行数**: 約2,000行（HTML/CSS/JS/TS合計）
-- **コミット数**: 3件
-- **実装期間**: 2025年初期〜10月10日
-- **機能数**: 8つ（うち7つ正常動作）
+- **総行数**: 約2,100行（HTML/CSS/JS/TS合計）
+- **コミット数**: 7件
+- **実装期間**: 2025年初期〜10月15日
+- **機能数**: 8つ（**すべて正常動作** ✅）
 - **Edge Functions**: 2つ
 - **データベーステーブル**: 2つ
+- **データベースRPC関数**: 1つ
 
 ---
 
@@ -283,7 +278,7 @@ body.dark-theme {
 
 2. **ドキュメント参照**:
    - `docs/DEVELOPMENT_LOG.md`
-   - `docs/TAG_FEATURE_TROUBLESHOOTING.md`
+   - `docs/TAG_FEATURE_TROUBLESHOOTING.md`（タグ機能の解決方法）
 
 3. **デバッグ方法**:
    - フロントエンド: ブラウザ開発者ツール (F12)
@@ -294,4 +289,4 @@ body.dark-theme {
 
 **Git Status**: すべての変更コミット済み
 **Branch**: main
-**Last Commit**: c7d3c30 - feat: カード型レイアウト・テーマ切替・タグ機能実装
+**Last Commit**: 54d2842 - fix: タグ機能を修正（PostgreSQL RPC使用）
