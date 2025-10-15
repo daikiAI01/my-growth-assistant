@@ -24,13 +24,14 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const insertData = { content: content, tags: tags };
-    console.log("Inserting data:", JSON.stringify(insertData));
+    // Use RPC function to properly handle text[] arrays
+    console.log("Calling RPC with content:", content, "and tags:", JSON.stringify(tags));
 
     const { data, error } = await supabaseClient
-      .from("logs")
-      .insert(insertData)
-      .select();
+      .rpc("insert_log_with_tags", {
+        p_content: content,
+        p_tags: tags
+      });
 
     if (error) {
       console.error("Database error:", JSON.stringify(error));
