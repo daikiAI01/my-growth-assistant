@@ -194,6 +194,27 @@
             flex-grow: 1;
         }
 
+        .goal-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .goal-actions button {
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-family: 'Noto Sans JP', sans-serif;
+            font-size: 12px;
+            transition: background-color 0.3s;
+        }
+
+        .goal-actions button:hover {
+            background-color: var(--input-bg);
+        }
+
         /* ログセクション */
         .search-form {
             display: flex;
@@ -354,10 +375,15 @@
     <div class="container">
         <h1>📊 記録ダッシュボード</h1>
 
+        <a href="https://bbuydqtmzjgxxamtvtda.supabase.co/functions/v1/google-auth/start" target="_blank" class="add-goal-btn" style="background-color: #db4437; text-decoration: none; display: block; text-align: center; margin-bottom: 2rem;">
+            📅 Googleカレンダーと連携
+        </a>
+
         <!-- 分析レポートカード -->
         <div class="card">
             <h2>📈 分析レポート</h2>
-            <div id="reportContent">読み込み中...</div>
+            <button id="runAnalysisBtn" class="add-goal-btn">🧠 AIでインサイトを分析する</button>
+            <div id="reportContent" style="margin-top: 1.5rem;">分析ボタンを押してください。</div>
         </div>
 
         <!-- アクティビティカレンダーカード -->
@@ -392,7 +418,26 @@
         <div class="modal-content">
             <h2>新しい目標</h2>
             <textarea id="goalContent" placeholder="新しい目標を入力..."></textarea>
-            <button id="saveGoalBtn">保存</button>
+
+            <button id="askAiBtn" style="background-color: #17a2b8; margin-top: 10px; margin-bottom: 10px;">🤖 AIにマイルストーンを提案してもらう</button>
+
+            <div id="aiSuggestionContainer" style="margin-top: 15px; padding: 15px; border: 2px dashed var(--border-color); border-radius: 8px; background-color: var(--input-bg); display: none;">
+                <h4 style="margin-top: 0; color: var(--accent-color);">💡 AIからの提案:</h4>
+                <div id="aiSuggestionContent" style="white-space: pre-wrap; line-height: 1.6;"></div>
+                <button id="addMilestonesBtn" style="width: 100%; padding: 10px; background-color: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; margin-top: 15px; display: none;">✅ これらを個別の目標として追加</button>
+            </div>
+
+            <button id="saveGoalBtn" style="margin-top: 10px;">この内容で目標を保存</button>
+        </div>
+    </div>
+
+    <!-- 目標編集モーダル -->
+    <div id="editGoalModal" class="modal">
+        <div class="modal-content">
+            <h2>目標を編集</h2>
+            <textarea id="editGoalContent"></textarea>
+            <button id="saveEditGoalBtn">更新</button>
+            <input type="hidden" id="editGoalId">
         </div>
     </div>
 
@@ -427,9 +472,11 @@
 
         const SUPABASE_URL = 'https://bbuydqtmzjgxxamtvtda.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJidXlkcXRtempneHhhbXR2dGRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk5OTUxODksImV4cCI6MjA3NTU3MTE4OX0.Lwp3DV2RPYf8pX7JjZAW33kH1jC4sWeZ_M7e4usAHXg';
+        const ANALYTICS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/analyze-insights`;
 
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         const reportContent = document.getElementById('reportContent');
+        const runAnalysisBtn = document.getElementById('runAnalysisBtn');
         const goalsChartCanvas = document.getElementById('goalsChart');
         let goalsChart = null;
         const goalsContainer = document.getElementById('goalsContainer');
@@ -442,13 +489,23 @@
         const goalContent = document.getElementById('goalContent');
 
         // 目標追加モーダルの操作
-        addGoalBtn.onclick = () => { goalModal.style.display = "block"; }
+        addGoalBtn.onclick = () => {
+            goalModal.style.display = "block";
+            // AI提案エリアをリセット
+            document.getElementById('aiSuggestionContainer').style.display = 'none';
+            document.getElementById('aiSuggestionContent').textContent = '';
+        }
+        const editGoalModal = document.getElementById('editGoalModal');
+
         window.onclick = (event) => {
             if (event.target == goalModal) {
                 goalModal.style.display = "none";
             }
             if (event.target == editModal) {
                 editModal.style.display = "none";
+            }
+            if (event.target == editGoalModal) {
+                editGoalModal.style.display = "none";
             }
         }
 
@@ -459,64 +516,181 @@
                 return;
             }
             try {
-                const { error } = await supabase.from('goals').insert({ content });
-                if (error) throw error;
-                alert('新しい目標を保存しました！');
+                // 1. DBに目標を保存
+                const { error: insertError } = await supabase.from('goals').insert({ content });
+                if (insertError) throw insertError;
+
+                // 2. Googleカレンダーにイベントを作成する関数を呼び出す
+                const { error: eventError } = await supabase.functions.invoke('create-calendar-event', {
+                    body: { goalContent: content },
+                });
+                if (eventError) throw eventError;
+
+                alert('新しい目標を保存し、Googleカレンダーに予定を追加しました！');
                 goalModal.style.display = "none";
                 goalContent.value = '';
+                // AI提案エリアをリセット
+                document.getElementById('aiSuggestionContainer').style.display = 'none';
+                document.getElementById('aiSuggestionContent').textContent = '';
                 fetchGoals();
             } catch (error) {
                 console.error('Error saving goal:', error);
-                alert('目標の保存に失敗しました。');
+                alert(`目標の保存またはカレンダー連携に失敗しました: ${error.message}`);
             }
         };
 
-        // 分析レポート機能
-        async function runAnalytics() {
-            try {
-                const { data: logs, error } = await supabase.from('logs').select('content');
-                if (error) throw error;
+        // AI マイルストーン提案機能
+        const askAiBtn = document.getElementById('askAiBtn');
+        const aiSuggestionContainer = document.getElementById('aiSuggestionContainer');
+        const aiSuggestionContent = document.getElementById('aiSuggestionContent');
+        const addMilestonesBtn = document.getElementById('addMilestonesBtn');
+        let currentSuggestions = '';
 
-                if (logs.length === 0) {
-                    reportContent.innerHTML = '<p>分析する記録がまだありません。</p>';
-                    return;
+        askAiBtn.onclick = async () => {
+            const content = goalContent.value.trim();
+
+            if (!content) {
+                alert('まず目標を入力してください。');
+                return;
+            }
+
+            // ローディング表示
+            askAiBtn.disabled = true;
+            askAiBtn.textContent = '⏳ AIが考え中...';
+            aiSuggestionContainer.style.display = 'block';
+            aiSuggestionContent.textContent = '提案を生成中...';
+            addMilestonesBtn.style.display = 'none';
+
+            try {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/suggest-milestones`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_ANON_KEY,
+                    },
+                    body: JSON.stringify({ goalContent: content })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'AI応答の取得に失敗しました');
                 }
 
-                const allText = logs.map(log => log.content).join(' ');
-                const words = allText.split(/[\s、。！？「」\n]+/).filter(w => w.length > 1);
-                const wordCounts = {};
-                words.forEach(word => {
-                    wordCounts[word] = (wordCounts[word] || 0) + 1;
-                });
-                const topKeywords = Object.entries(wordCounts)
-                    .filter(([word]) => word.length > 1)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 10);
+                // AIの提案を表示（テキストエリアには追記しない）
+                currentSuggestions = data.suggestions;
+                aiSuggestionContent.textContent = currentSuggestions;
 
-                const positiveWords = ['良い', 'すごい', '楽しい', '嬉しい', '成功', '達成', '頑張った', '最高', '良かった', 'できた', '完成'];
-                const negativeWords = ['悪い', 'ダメ', '辛い', '悲しい', '失敗', '問題', '難しい', 'できない', '困難'];
-                let sentimentScore = 0;
+                // 「個別の目標として追加」ボタンを表示
+                addMilestonesBtn.style.display = 'block';
 
-                positiveWords.forEach(word => {
-                    if (allText.includes(word)) sentimentScore++;
-                });
-                negativeWords.forEach(word => {
-                    if (allText.includes(word)) sentimentScore--;
+            } catch (error) {
+                console.error('Error getting AI suggestions:', error);
+                aiSuggestionContent.textContent = `エラーが発生しました: ${error.message}`;
+            } finally {
+                // ボタンを元に戻す
+                askAiBtn.disabled = false;
+                askAiBtn.textContent = '🤖 AIにマイルストーンを提案してもらう';
+            }
+        };
+
+        // マイルストーンを個別の目標として追加
+        addMilestonesBtn.onclick = async () => {
+            if (!currentSuggestions) {
+                alert('提案が見つかりません。');
+                return;
+            }
+
+            // AIの提案を行ごとに分割して、番号付きリストを抽出
+            const lines = currentSuggestions.split('\n').filter(line => line.trim());
+            const milestones = [];
+
+            for (const line of lines) {
+                // 「1. 」「2. 」などの形式を検出
+                const match = line.match(/^\d+\.\s*(.+)$/);
+                if (match) {
+                    milestones.push(match[1].trim());
+                }
+            }
+
+            if (milestones.length === 0) {
+                alert('マイルストーンを抽出できませんでした。');
+                return;
+            }
+
+            // 確認
+            if (!confirm(`${milestones.length}個のマイルストーンを個別の目標として追加しますか？`)) {
+                return;
+            }
+
+            // 各マイルストーンを個別の目標として保存
+            addMilestonesBtn.disabled = true;
+            addMilestonesBtn.textContent = '追加中...';
+
+            try {
+                for (const milestone of milestones) {
+                    const { error } = await supabase.from('goals').insert({ content: milestone });
+                    if (error) throw error;
+                }
+
+                alert(`${milestones.length}個の目標を追加しました！`);
+                goalModal.style.display = "none";
+                goalContent.value = '';
+                aiSuggestionContainer.style.display = 'none';
+                aiSuggestionContent.textContent = '';
+                addMilestonesBtn.style.display = 'none';
+                currentSuggestions = '';
+                fetchGoals();
+
+            } catch (error) {
+                console.error('Error adding milestones:', error);
+                alert('目標の追加に失敗しました。');
+            } finally {
+                addMilestonesBtn.disabled = false;
+                addMilestonesBtn.textContent = '✅ これらを個別の目標として追加';
+            }
+        };
+
+        // 分析レポート機能（AIインサイト分析）
+        async function runAnalytics() {
+            reportContent.innerHTML = '<p>🤖 AIが分析中です... (最大30秒ほどかかる場合があります)</p>';
+            runAnalysisBtn.disabled = true;
+
+            try {
+                const response = await fetch(ANALYTICS_FUNCTION_URL, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
                 });
 
-                let sentimentText = '😐 普通';
-                if (sentimentScore > 0) sentimentText = '😄 ポジティブ';
-                if (sentimentScore < 0) sentimentText = '😞 ネガティブ';
+                if (!response.ok) {
+                    throw new Error('分析サーバーとの通信に失敗しました。');
+                }
 
-                let reportHTML = `<h3>感情分析</h3><div class="sentiment">${sentimentText}</div><h3>トップキーワード</h3>`;
-                topKeywords.forEach(([word, count]) => {
-                    reportHTML += `<span class="keyword">${word} (${count})</span>`;
-                });
-                reportContent.innerHTML = reportHTML;
+                const data = await response.json();
+
+                if (data.message) {
+                    // ログが0件の場合
+                    reportContent.innerHTML = `<p>${data.message}</p>`;
+                } else if (data.insights) {
+                    // マークダウンの箇条書きを見やすくするために単純な置換を行う
+                    const formattedInsights = data.insights
+                        .replace(/\n/g, '<br>')
+                        .replace(/- /g, '• ')
+                        .replace(/\*\*/g, '');
+                    reportContent.innerHTML = `<div style="text-align: left; line-height: 1.8;">${formattedInsights}</div>`;
+                } else {
+                    throw new Error('予期しないレスポンス形式です。');
+                }
 
             } catch (error) {
                 console.error('Error running analytics:', error);
-                reportContent.innerHTML = `<p>分析に失敗しました: ${error.message}</p>`;
+                reportContent.innerHTML = `<p>❌ 分析に失敗しました: ${error.message}</p>`;
+            } finally {
+                runAnalysisBtn.disabled = false;
             }
         }
 
@@ -638,8 +812,27 @@
                     content.className = 'goal-content';
                     content.textContent = goal.content;
 
+                    // 編集・削除ボタン
+                    const actions = document.createElement('div');
+                    actions.className = 'goal-actions';
+
+                    const editBtn = document.createElement('button');
+                    editBtn.textContent = '編集';
+                    editBtn.className = 'edit-goal-btn';
+                    editBtn.dataset.id = goal.id;
+                    editBtn.dataset.content = goal.content;
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = '削除';
+                    deleteBtn.className = 'delete-goal-btn';
+                    deleteBtn.dataset.id = goal.id;
+
+                    actions.appendChild(editBtn);
+                    actions.appendChild(deleteBtn);
+
                     goalItem.appendChild(checkbox);
                     goalItem.appendChild(content);
+                    goalItem.appendChild(actions);
                     goalsContainer.appendChild(goalItem);
                 });
             } catch (error) {
@@ -781,9 +974,80 @@
             }
         });
 
+        // 目標編集機能
+        const editGoalContent = document.getElementById('editGoalContent');
+        const saveEditGoalBtn = document.getElementById('saveEditGoalBtn');
+        const editGoalId = document.getElementById('editGoalId');
+
+        goalsContainer.addEventListener('click', (event) => {
+            if (event.target.classList.contains('edit-goal-btn')) {
+                editGoalContent.value = event.target.dataset.content;
+                editGoalId.value = event.target.dataset.id;
+                editGoalModal.style.display = 'block';
+            }
+        });
+
+        saveEditGoalBtn.addEventListener('click', async () => {
+            const newContent = editGoalContent.value.trim();
+            const goalId = editGoalId.value;
+
+            if (!newContent) {
+                alert('目標の内容を入力してください。');
+                return;
+            }
+
+            try {
+                const { error } = await supabase
+                    .from('goals')
+                    .update({ content: newContent })
+                    .eq('id', goalId);
+
+                if (error) {
+                    throw error;
+                }
+
+                alert('目標を更新しました。');
+                editGoalModal.style.display = 'none';
+                fetchGoals();
+
+            } catch (error) {
+                console.error('Error updating goal:', error);
+                alert('更新に失敗しました。');
+            }
+        });
+
+        // 目標削除機能
+        goalsContainer.addEventListener('click', async (event) => {
+            if (event.target.classList.contains('delete-goal-btn')) {
+                const goalId = event.target.dataset.id;
+
+                if (confirm('この目標を本当に削除しますか？')) {
+                    try {
+                        const { error } = await supabase
+                            .from('goals')
+                            .delete()
+                            .eq('id', goalId);
+
+                        if (error) {
+                            throw error;
+                        }
+
+                        alert('目標を削除しました。');
+                        fetchGoals();
+
+                    } catch (error) {
+                        console.error('Error deleting goal:', error);
+                        alert('削除に失敗しました。');
+                    }
+                }
+            }
+        });
+
+        // 分析実行ボタンのイベントリスナー
+        runAnalysisBtn.addEventListener('click', runAnalytics);
+
         // ページ初期化
         async function initializePage() {
-            runAnalytics();
             fetchGoals();
             await fetchLogs();
             initializeCalendar();
